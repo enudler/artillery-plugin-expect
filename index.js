@@ -16,161 +16,160 @@ const REPORTERS = require('./lib/reporters');
 module.exports.Plugin = ExpectationsPlugin;
 
 function ExpectationsPlugin(script, events) {
-  this.script = script;
-  this.events = events;
+    this.script = script;
+    this.events = events;
 
-  if (!script.config.processor) {
-    script.config.processor = {};
-  }
-
-  script.scenarios.forEach(function(scenario) {
-    scenario.onError = [].concat(scenario.onError || []);
-    scenario.onError.push('expectationsPluginOnError');
-
-    scenario.afterResponse = [].concat(scenario.afterResponse || []);
-    scenario.afterResponse.push('expectationsPluginCheckExpectations');
-
-    scenario.beforeScenario = [].concat(scenario.beforeScenario || []);
-    scenario.beforeScenario.push('expectationsPluginSetExpectOptions');
-
-    scenario.afterScenario = [].concat(scenario.afterScenario || []);
-    scenario.afterScenario.push('expectationsPluginMaybeFlushDatadog');
-  });
-
-  script.config.processor.expectationsPluginCheckExpectations = expectationsPluginCheckExpectations;
-  script.config.processor.expectationsPluginOnError = expectationsPluginOnError;
-
-  script.config.processor.expectationsPluginSetExpectOptions = function(
-    userContext,
-    events,
-    done
-  ) {
-    userContext.expectationsPlugin = {};
-    userContext.expectationsPlugin.outputFormat =
-      script.config.plugins.expect.outputFormat || 'pretty';
-    if (script.config.plugins.expect.externalReporting) {
-      // Datadog-only right now
-      userContext.expectationsPlugin.reporter = 'datadog';
-      const reportingConfig = script.config.plugins.expect.externalReporting;
-      userContext.expectationsPlugin.datadog = metrics.init({
-        host: reportingConfig.host || 'artillery-expectations',
-        prefix: reportingConfig.prefix,
-        flushIntervalSeconds: 5,
-        defaultTags: reportingConfig.tags
-      });
+    if (!script.config.processor) {
+        script.config.processor = {};
     }
-    return done();
-  };
 
-  debug('Initialized');
+    script.scenarios.forEach(function (scenario) {
+        scenario.onError = [].concat(scenario.onError || []);
+        scenario.onError.push('expectationsPluginOnError');
+
+        scenario.afterResponse = [].concat(scenario.afterResponse || []);
+        scenario.afterResponse.push('expectationsPluginCheckExpectations');
+
+        scenario.beforeScenario = [].concat(scenario.beforeScenario || []);
+        scenario.beforeScenario.push('expectationsPluginSetExpectOptions');
+
+        scenario.afterScenario = [].concat(scenario.afterScenario || []);
+        scenario.afterScenario.push('expectationsPluginMaybeFlushDatadog');
+    });
+
+    script.config.processor.expectationsPluginCheckExpectations = expectationsPluginCheckExpectations;
+    script.config.processor.expectationsPluginOnError = expectationsPluginOnError;
+
+    script.config.processor.expectationsPluginSetExpectOptions = function (
+        userContext,
+        events,
+        done
+    ) {
+        userContext.expectationsPlugin = {};
+        userContext.expectationsPlugin.outputFormat =
+            script.config.plugins.expect.outputFormat || 'pretty';
+        if (script.config.plugins.expect.externalReporting) {
+            // Datadog-only right now
+            userContext.expectationsPlugin.reporter = 'datadog';
+            const reportingConfig = script.config.plugins.expect.externalReporting;
+            userContext.expectationsPlugin.datadog = metrics.init({
+                host: reportingConfig.host || 'artillery-expectations',
+                prefix: reportingConfig.prefix,
+                flushIntervalSeconds: 5,
+                defaultTags: reportingConfig.tags
+            });
+        }
+        return done();
+    };
+
+    debug('Initialized');
 }
 
 function expectationsPluginOnError(scenarioErr, requestParams, userContext, events, done) {
-  if (userContext.expectationsPlugin.outputFormat === 'json') {
-    console.log(JSON.stringify({ ok: false, error: scenarioErr.message }));
-  } else {
-    console.log(chalk.red('Error:'), scenarioErr.message);
-  }
-  return done();
+    if (userContext.expectationsPlugin.outputFormat === 'json') {
+        console.log(JSON.stringify({ok: false, error: scenarioErr.message}));
+    } else {
+        console.log(chalk.red('Error:'), scenarioErr.message);
+    }
+    return done();
 }
 
 function expectationsPluginCheckExpectations(
-  req,
-  res,
-  userContext,
-  events,
-  done
-) {
-  debug('Checking expectations');
-
-  const expectations = _.isArray(req.expect) ?
-        req.expect :
-        _.map(req.expect, (v, k) => { const o = {}; o[k] = v; return o; });
-
-  const results = [];
-
-  let body = maybeParseBody(res);
-
-  _.each(expectations, ex => {
-    const checker = Object.keys(ex)[0];
-    debug(`checker: ${checker}`);
-    let result = EXPECTATIONS[checker].call(
-      this,
-      ex,
-      body,
-      req,
-      res,
-      userContext
-    );
-    results.push(result);
-  });
-
-  userContext.expectations = [].concat(userContext.expectations || []);
-  const requestExpectations = {
-    name: req.name,
-    url: urlparse(req.url).path,
-    results: results
-  };
-  userContext.expectations.push(requestExpectations);
-
-  FORMATTERS[userContext.expectationsPlugin.outputFormat].call(
-    this,
-    requestExpectations,
     req,
     res,
-    userContext
-  );
+    userContext,
+    events,
+    done
+) {
+    debug('Checking expectations');
 
-  if (userContext.expectationsPlugin.reporter) {
-    REPORTERS[userContext.expectationsPlugin.reporter].call(
-      this,
-      requestExpectations,
-      req,
-      res,
-      userContext
+    const expectations = _.isArray(req.expect) ?
+        req.expect :
+        _.map(req.expect, (v, k) => {
+            const o = {};
+            o[k] = v;
+            return o;
+        });
+
+    const results = [];
+
+    let body = maybeParseBody(res);
+
+    _.each(expectations, ex => {
+        const checker = Object.keys(ex)[0];
+        debug(`checker: ${checker}`);
+        let result = EXPECTATIONS[checker].call(
+            this,
+            ex,
+            body,
+            req,
+            res,
+            userContext
+        );
+        results.push(result);
+    });
+
+    userContext.expectations = [].concat(userContext.expectations || []);
+    const requestExpectations = {
+        name: req.name,
+        url: urlparse(req.url).path,
+        results: results
+    };
+    userContext.expectations.push(requestExpectations);
+
+    FORMATTERS[userContext.expectationsPlugin.outputFormat].call(
+        this,
+        requestExpectations,
+        req,
+        res,
+        userContext
     );
-  }
 
-  const failedExpectations = results.filter(res => !res.ok).length > 0;
+    if (userContext.expectationsPlugin.reporter) {
+        REPORTERS[userContext.expectationsPlugin.reporter].call(
+            this,
+            requestExpectations,
+            req,
+            res,
+            userContext
+        );
+    }
 
-  if (failedExpectations) {
-    return done(new Error(`Failed expectations for request ${req.url}`));
-  } else {
-    return done();
-  }
+    requestExpectations.name = requestExpectations.name || `${req.method} ${req.requestEntryPath}`;
+    return done(undefined, requestExpectations)
 }
 
 function expectationsPluginMaybeFlushDatadog(userContext, events, done) {
-  if (
-    userContext.expectationsPlugin &&
-      userContext.expectationsPlugin.datadog
-  ) {
-    userContext.expectationsPlugin.datadog.flush(
-      () => {
-        return done();
-      },
-      () => {
-        return done();
-      }
-    );
-  }
+    if (
+        userContext.expectationsPlugin &&
+        userContext.expectationsPlugin.datadog
+    ) {
+        userContext.expectationsPlugin.datadog.flush(
+            () => {
+                return done();
+            },
+            () => {
+                return done();
+            }
+        );
+    }
 }
 
 function maybeParseBody(res) {
-  let body;
-  if (
-    typeof res.body === 'string' &&
-    res.headers['content-type'] &&
-    res.headers['content-type'].indexOf('application/json') !== -1
-  ) {
-    try {
-      body = JSON.parse(res.body);
-    } catch (err) {
-      body = null;
-    }
+    let body;
+    if (
+        typeof res.body === 'string' &&
+        res.headers['content-type'] &&
+        res.headers['content-type'].indexOf('application/json') !== -1
+    ) {
+        try {
+            body = JSON.parse(res.body);
+        } catch (err) {
+            body = null;
+        }
 
-    return body;
-  } else {
-    return res.body;
-  }
+        return body;
+    } else {
+        return res.body;
+    }
 }
