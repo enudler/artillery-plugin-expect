@@ -135,7 +135,7 @@ function expectationsPluginCheckExpectations(
         );
     }
 
-    requestExpectations.name = requestExpectations.name || req.requestEntryPath;
+    requestExpectations.name = requestExpectations.name || `${req.method} ${req.requestEntryPath}`;
     return done(undefined, requestExpectations)
 }
 
